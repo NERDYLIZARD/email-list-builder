@@ -9,10 +9,11 @@
 
 /*
 
-	1. HOOKS
+  1. HOOKS
 		1.1 - registers all our custom shortcodes
 		1.2 - register custom admin column headers
 		1.3 - register custom admin column data
+		1.4 - register ajax actions
 
 	2. SHORTCODES
 		2.1 - elb_register_shortcodes()
@@ -21,16 +22,25 @@
 	3. FILTERS
 		3.1 - elb_subscriber_column_headers()
 		3.2 - elb_subscriber_column_data()
-		3.2.2 - elb_register_custom_admin_titles()
-		3.2.3 - elb_custom_admin_titles()
+      3.2.2 - elb_register_custom_admin_titles()
+      3.2.3 - elb_custom_admin_titles()
 		3.3 - elb_list_column_headers()
 		3.4 - elb_list_column_data()
 
 	4. EXTERNAL SCRIPTS
 
 	5. ACTIONS
+		5.1 - elb_save_subscription()
+		5.2 - elb_save_subscriber()
+		5.3 - elb_add_subscription()
 
 	6. HELPERS
+		6.1 - elb_subscriber_has_subscription()
+		6.2 - elb_get_subscriber_id()
+		6.3 - elb_get_subscritions()
+		6.4 - elb_return_json()
+		6.5 - elb_get_acf_key()
+		6.6 - elb_get_subscriber_data()
 
 	7. CUSTOM POST TYPES
 
@@ -216,16 +226,197 @@ function elb_list_column_data($columns, $post_id)
 
 
 /* !5. ACTIONS */
-// 5.1 -
+// 5.1
 function elb_save_subscription()
 {
-  var_export('test');
+  $result = [
+    'status'  => 0,
+    'message' => 'Subscription was not saved. '
+  ];
+
+  try {
+
+	  $list_id = (int) $_POST['elb_list'];
+
+	  $subscriber_data = [
+		  'fname' => sanitize_text_field( $_POST['elb_fname'] ),
+		  'lname' => sanitize_text_field( $_POST['elb_lname'] ),
+		  'email' => sanitize_email( $_POST['elb_email'] ),
+	  ];
+
+	  // attempt to create/save subscriber
+	  $subscriber_id = elb_save_subscriber( $subscriber_data );
+
+	  // if successfully create/save subscriber
+	  if ( $subscriber_id ) {
+		  // check if the list has been subscribed
+      if (elb_subscriber_has_subscription($subscriber_id, $list_id)) {
+        // get list object
+        $list = get_post($list_id);
+        $result['message'] .= esc_attr( $subscriber_data['email'] .' is already subscribed to '. $list->post_title .'.');
+      }
+      else {
+        $subscriber_saved = elb_add_subscription($subscriber_id, $list_id);
+
+        if ($subscriber_saved) {
+          $result['status'] = 1;
+          $result['message'] = 'Successfully Subscribed';
+        }
+      }
+	  }
+  }
+  catch (Exception $exception) {}
+
+  // return json
+	elb_return_json($result);
+
+}
+
+// 5.2
+// hint: save/create a subscriber
+function elb_save_subscriber($subscriber_data)
+{
+  // set default to indicate error in saving
+  $subscriber_id = 0;
+
+  try {
+	  $subscriber_id = elb_get_subscriber_id( $subscriber_data['email'] );
+
+	  // if she's new subscriber
+	  if ( !$subscriber_id ) {
+		  // add new subscriber
+		  $subscriber_id = wp_insert_post( [
+			  'post_type'   => 'elb_subscriber',
+			  'post_title'  => $subscriber_data['fname'] . ' ' . $subscriber_data['lname'],
+			  'post_status' => 'publish'
+		  ], true );
+	  }
+    // update subscriber's data
+    update_field(elb_get_acf_key('elb_fname'), $subscriber_data['fname'], $subscriber_id);
+    update_field(elb_get_acf_key('elb_lname'), $subscriber_data['lname'], $subscriber_id);
+    update_field(elb_get_acf_key('elb_email'), $subscriber_data['email'], $subscriber_id);
+
+  }
+  catch (Exception $exception) {
+    // runtime error i.e. saving failed
+  }
+
+  return $subscriber_id;
+}
+
+// 5.3
+function elb_add_subscription($subscriber_id, $list_id)
+{
+  $subscription_saved = false;
+
+  if (!elb_subscriber_has_subscription($subscriber_id, $list_id)) {
+
+    $subscriptions = elb_get_subscriptions($subscriber_id);
+	  $subscriptions []= $list_id;
+
+	  // update ACF
+	  update_field( elb_get_acf_key( 'elb_subscriptions' ), $subscriptions, $subscriber_id );
+
+	  $subscription_saved = true;
+  }
+
+  return $subscription_saved;
 }
 
 
 /* !6. HELPERS */
 
+// 6.1
+function elb_subscriber_has_subscription($subscriber_id, $list_id)
+{
+  $has_subscription = false;
 
+  $subscriptions = elb_get_subscriptions($subscriber_id);
+
+	if (in_array($list_id, $subscriptions))
+    $has_subscription = true;
+
+  return $has_subscription;
+
+}
+
+// 6.2
+// hint: retrieves a subscriber_id from an email address
+function elb_get_subscriber_id($email)
+{
+  $subscriber_id = 0;
+
+  try {
+    $subscriber_query = new WP_Query([
+      'post_type'       => 'elb_subscriber',
+      'posts_per_page'  => 1,
+      'meta_key'        => 'elb_email',
+      'meta_query'      => [
+        'key'     => 'elb_email',
+        'value'   => $email,
+        'compare' => '='
+      ]
+    ]);
+
+    // if subscriber exists
+    if ($subscriber_query->have_posts()) {
+      // get her id
+      $subscriber_query->the_post();
+      $subscriber_id = get_the_ID();
+    }
+
+  } catch (Exception $exception) {
+
+  }
+
+  // reset query init by have_posts()
+  wp_reset_query();
+  return (int)$subscriber_id;
+}
+
+
+// 6.3
+// hint: return subscription's id
+function elb_get_subscriptions($subscriber_id)
+{
+  $subscriptions = [];
+
+  $lists = get_field(elb_get_acf_key('elb_subscriptions'), $subscriber_id);
+
+  if ($lists) {
+    foreach ( $lists as $list )
+      $subscriptions []= $list->ID;
+  }
+
+  return (array)$subscriptions;
+}
+
+// 6.4
+function elb_return_json($php_array)
+{
+  $json_format = json_encode($php_array);
+
+  // stop all other processes and return
+  die($json_format);
+}
+
+// 6.5
+// hint: gets the unique act field key from the field name
+function elb_get_acf_key($field_name)
+{
+  // field_id extract from Advanced Custom Field form
+  switch ($field_name) {
+    case 'elb_fname':
+      return 'field_59aa6f41ef4d5';
+    case 'elb_lname':
+      return 'field_59aa6f83ef4d6';
+    case 'elb_email':
+      return 'field_59aa6f96ef4d7';
+    case 'elb_subscriptions':
+      return 'field_59aa6fbaef4d8';
+  }
+  return $field_name;
+}
 
 
 /* !7. CUSTOM POST TYPES */
