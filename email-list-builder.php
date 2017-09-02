@@ -61,6 +61,12 @@ add_filter('manage_elb_list_posts_custom_column', 'elb_list_column_data', 1, 2);
 
 add_action('admin_head-edit.php', 'elb_register_custom_admin_titles');
 
+// 1.4
+// hint: register ajax actions
+add_action('wp_ajax_nopriv_elb_save_subscription', 'elb_save_subscription'); // regular website visitor
+add_action('wp_ajax_elb_save_subscription', 'elb_save_subscription'); // admin user
+
+
 
 /* !2. SHORTCODES */
 
@@ -73,11 +79,18 @@ function elb_register_shortcodes()
 // 2.2 - return html subscription form
 function elb_form_shortcode($args, $content = '')
 {
+
+  $list_id = isset($args['id']) ? (int)$args['id'] : 0;
+
   // html form
   $output = '
     <div class="elb">
 		
-			<form id="elb_form" name="elb_form" class="elb-form" method="post">
+			<form id="elb_form" name="elb_form" class="elb-form" method="post"
+			  action="' . admin_url() . 'admin-ajax.php?action=elb_save_subscription"
+			>
+			  
+			  <input type="hidden" name="elb_list" value="' . $list_id . '">
 			
 				<p class="elb-input-container">
 				
@@ -203,8 +216,11 @@ function elb_list_column_data($columns, $post_id)
 
 
 /* !5. ACTIONS */
-
-
+// 5.1 -
+function elb_save_subscription()
+{
+  var_export('test');
+}
 
 
 /* !6. HELPERS */
