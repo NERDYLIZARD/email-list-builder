@@ -14,6 +14,7 @@
 		1.2 - register custom admin column headers
 		1.3 - register custom admin column data
 		1.4 - register ajax actions
+	  1.5 - load external files to public website
 
 	2. SHORTCODES
 		2.1 - elb_register_shortcodes()
@@ -28,6 +29,8 @@
 		3.4 - elb_list_column_data()
 
 	4. EXTERNAL SCRIPTS
+		4.1 - elb_public_scripts()
+
 
 	5. ACTIONS
 		5.1 - elb_save_subscription()
@@ -71,11 +74,12 @@ add_filter('manage_elb_list_posts_custom_column', 'elb_list_column_data', 1, 2);
 
 add_action('admin_head-edit.php', 'elb_register_custom_admin_titles');
 
-// 1.4
-// hint: register ajax actions
+// 1.4 - register ajax actions
 add_action('wp_ajax_nopriv_elb_save_subscription', 'elb_save_subscription'); // regular website visitor
 add_action('wp_ajax_elb_save_subscription', 'elb_save_subscription'); // admin user
 
+// 1.5 - load external files to public website
+add_action('wp_enqueue_scripts', 'elb_public_scripts');
 
 
 /* !2. SHORTCODES */
@@ -224,6 +228,17 @@ function elb_list_column_data($columns, $post_id)
 
 /* !4. EXTERNAL SCRIPTS */
 
+// 4.1
+// hint: loads external files into PUBLIC website
+function elb_public_scripts()
+{
+	wp_register_script(
+		'email-list-builder-js-public',
+		plugins_url('/js/public/email-list-builder.js',__FILE__),
+		['jquery'], '', true
+	);
+	wp_enqueue_script('email-list-builder-js-public');
+}
 
 
 
