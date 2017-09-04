@@ -483,7 +483,7 @@ $(document).ready(function(){
 ?>
 
 			setTimeout( function(){ 
-				$(document).trigger('acf/setup_fields', $('#wpbody') ); 
+				$(document).trigger('acf/setup_fields', $('#wpbody') );
 			}, 200);
 			
 		}

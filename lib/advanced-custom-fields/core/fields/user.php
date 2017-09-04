@@ -242,7 +242,7 @@ class acf_field_user extends acf_field
 		$field['type'] = 'select';
 		
 		
-		do_action('acf/create_field', $field);			
+		do_action('acf/create_field', $field);
 		
 	}
 	

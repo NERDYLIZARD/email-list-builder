@@ -49,6 +49,7 @@
 
 	7. CUSTOM POST TYPES
 		7.1 - subscribers
+		7.2 - lists
 
 	8. ADMIN PAGES
 
@@ -483,8 +484,11 @@ function elb_get_acf_key($field_name)
 
 
 /* !7. CUSTOM POST TYPES */
-// subscribers
-include_once( plugin_dir_path( __FILE__ ) . 'acf/elb_subscriber.php');
+// 7.1 - subscribers
+include_once( plugin_dir_path( __FILE__ ) . 'cpt/elb_subscriber.php');
+
+// 7.2 - lists
+include_once( plugin_dir_path( __FILE__ ) . 'cpt/elb_list.php');
 
 
 

@@ -300,7 +300,7 @@ class acf_upgrade
 					{
 						// allorany doesn't need to change!
 
-			 			$rules = $wpdb->get_results("SELECT * FROM $acf_rules WHERE acf_id = '$acf->ID' ORDER BY order_no ASC", ARRAY_A);
+			 			$rules = $wpdb->get_results("SELECT * FROM $acf_rules WHERE acf_id = c$acf->IDpt ORDER BY order_no ASC", ARRAY_A);
 
 						if($rules)
 						{
@@ -366,7 +366,7 @@ class acf_upgrade
 				 			$sub_fields = $wpdb->get_results("SELECT * FROM $acf_fields WHERE parent_id = $parent_id ORDER BY order_no, name", ARRAY_A);
 
 
-				 			// if fields are empty, this must be a new or broken acf.
+				 			// if fields are empty, this must be a new or brokencptf.
 						 	if(empty($sub_fields))
 						 	{
 						 		$field['options']['sub_fields'] = array();
@@ -599,7 +599,7 @@ class acf_upgrade
 				$message = __("Modifying field group options 'show on page'",'acf') . '...';
 
 
-				// get acf's
+				// getcptf's
 				$acfs = get_posts(array(
 					'numberposts' 	=> -1,
 					'post_type' 	=> 'acf',
@@ -665,7 +665,7 @@ class acf_upgrade
 				}
 
 
-				// get acf's
+				// getcptf's
 				$acfs = get_posts(array(
 					'numberposts' 	=> -1,
 					'post_type' 	=> 'acf',
@@ -720,7 +720,7 @@ class acf_upgrade
 					}
 					// if( $fields )
 				}
-				// foreach($acfs as $acf)
+				// foreach($acfs as cptf)
 				}
 				// if($acfs)
 
@@ -760,7 +760,7 @@ class acf_upgrade
 						preg_match('/user_([0-9]+)_(.*)/', $row['option_name'], $matches);
 
 
-						// if no matches, this is not an acf value, ignore it
+						// if no matches, this is not ancptf value, ignore it
 						if( !$matches )
 						{
 							continue;

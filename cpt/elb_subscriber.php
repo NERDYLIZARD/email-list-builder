@@ -4,6 +4,46 @@
  * Time: 21:48
  */
 
+add_action( 'init', 'elb_register_elb_subscriber' );
+function elb_register_elb_subscriber() {
+
+	/**
+	 * Post Type: Subscribers.
+	 */
+
+	$labels = array(
+		"name" => __( "Subscribers", "email-list-builder" ),
+		"singular_name" => __( "Subscriber", "email-list-builder" ),
+	);
+
+	$args = array(
+		"label" => __( "Subscribers", "email-list-builder" ),
+		"labels" => $labels,
+		"description" => "",
+		"public" => false,
+		"publicly_queryable" => true,
+		"show_ui" => true,
+		"show_in_rest" => false,
+		"rest_base" => "",
+		"has_archive" => false,
+		"show_in_menu" => true,
+		"exclude_from_search" => true,
+		"capability_type" => "post",
+		"map_meta_cap" => true,
+		"hierarchical" => false,
+		"rewrite" => array( "slug" => "elb_subscriber", "with_front" => false ),
+		"query_var" => true,
+		"supports" => false,
+	);
+
+	register_post_type( "elb_subscriber", $args );
+}
+
+
+
+
+// Advanced Custom Fields's data
+
 if(function_exists("register_field_group"))
 {
 	register_field_group(array (

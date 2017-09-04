@@ -108,7 +108,7 @@ if( empty($groups) )
 							'choices' => $choices,
 						);
 						
-						do_action('acf/create_field', $args);							
+						do_action('acf/create_field', $args);
 						
 					?></td>
 					<td class="operator"><?php 	
