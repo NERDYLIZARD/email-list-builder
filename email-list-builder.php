@@ -96,29 +96,31 @@ function elb_form_shortcode($args, $content = '')
 
   $list_id = isset($args['id']) ? (int)$args['id'] : 0;
 
+	$title = isset($args['title']) ? $args['title'] : '';
+
   // html form
   $output = '
     <div class="elb">
 		
 			<form id="elb_form" name="elb_form" class="elb-form" method="post"
-			  action="' . admin_url() . 'admin-ajax.php?action=elb_save_subscription"
-			>
+			  action="' . admin_url() . 'admin-ajax.php?action=elb_save_subscription">
 			  
-			  <input type="hidden" name="elb_list" value="' . $list_id . '">
+			  <input type="hidden" name="elb_list" value="' . $list_id . '">';
 			
-				<p class="elb-input-container">
+	if( strlen($title) )
+		$output .= '<h3 class="slb-title">'. $title .'</h3>';
 				
+				
+			$output .=	'
+				<p class="elb-input-container">
 					<label>Your Name</label><br />
 					<input type="text" name="elb_fname" placeholder="First Name" />
 					<input type="text" name="elb_lname" placeholder="Last Name" />
-				
 				</p>
 				
 				<p class="elb-input-container">
-				
 					<label>Your Email</label><br />
 					<input type="email" name="elb_email" placeholder="you@email.com" />
-				
 				</p>
   ';
 
@@ -232,12 +234,17 @@ function elb_list_column_data($columns, $post_id)
 // hint: loads external files into PUBLIC website
 function elb_public_scripts()
 {
+	// registration
 	wp_register_script(
 		'email-list-builder-js-public',
 		plugins_url('/js/public/email-list-builder.js',__FILE__),
 		['jquery'], '', true
 	);
+	wp_register_style('email-list-builder-css-public', plugins_url('/css/public/email-list-builder.css',__FILE__));
+
+	// enqueue
 	wp_enqueue_script('email-list-builder-js-public');
+	wp_enqueue_style('email-list-builder-css-public');
 }
 
 
