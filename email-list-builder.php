@@ -49,6 +49,7 @@
 		6.4 - elb_return_json()
 		6.5 - elb_get_acf_key()
 		6.6 - elb_get_subscriber_data()
+		6.7 - elb_get_page_select()
 
 	7. CUSTOM POST TYPES
 		7.1 - subscribers
@@ -256,11 +257,11 @@ function elb_admin_menus()
 	add_menu_page('', 'List Builder', 'manage_options', $top_menu_item, $top_menu_item, 'dashicons-email-alt');
 
 	// submenu items
-	add_submenu_page($top_menu_item, '', 'Dashboard', 'manage_options', $top_menu_item);
+	add_submenu_page($top_menu_item, 'Email List Builder', 'Dashboard', 'manage_options', $top_menu_item);
 	add_submenu_page($top_menu_item, '', 'Email Lists', 'manage_options','edit.php?post_type=elb_list');
 	add_submenu_page($top_menu_item, '', 'Subscribers', 'manage_options','edit.php?post_type=elb_subscriber');
-	add_submenu_page($top_menu_item, '', 'Import Subscribers', 'manage_options','elb_import_admin_page', 'elb_import_admin_page');
-	add_submenu_page($top_menu_item, '', 'Settings', 'manage_options','elb_options_admin_page', 'elb_options_admin_page');
+	add_submenu_page($top_menu_item, 'Import Subscribers', 'Import Subscribers', 'manage_options','elb_import_admin_page', 'elb_import_admin_page');
+	add_submenu_page($top_menu_item, 'List Builder Options', 'Plugin Options', 'manage_options','elb_options_admin_page', 'elb_options_admin_page');
 
 }
 
@@ -508,6 +509,75 @@ function elb_get_acf_key($field_name)
   return $field_name;
 }
 
+// 6.7
+// hint: returns html for a page selector
+function elb_get_page_select( $input_name="elb_page", $input_id="", $parent=-1, $value_field="id", $selected_value="" )
+{
+	// get WP pages
+	$pages = get_pages([
+		'sort_order'  => 'asc',
+		'sort_column' => 'post_title',
+		'post_type'   => 'page',
+		'parent'      => $parent,
+		'status'      => ['draft','publish'],
+	]);
+
+	// setup our select html
+	$select = '<select name="'. $input_name .'" ';
+
+	// IF $input_id was passed in
+	if( strlen($input_id) ):
+
+		// add an input id to our select html
+		$select .= 'id="'. $input_id .'" ';
+
+	endif;
+
+	// setup our first select option
+	$select .= '><option value="">- Select One -</option>';
+
+	// loop over all the pages
+	foreach ( $pages as &$page ):
+
+		// get the page id as our default option value
+		$value = $page->ID;
+
+		// determine which page attribute is the desired value field
+		switch( $value_field ) {
+			case 'slug':
+				$value = $page->post_name;
+				break;
+			case 'url':
+				$value = get_page_link( $page->ID );
+				break;
+			default:
+				$value = $page->ID;
+		}
+
+		// check if this option is the currently selected option
+		$selected = '';
+		if( $selected_value == $value ):
+			$selected = ' selected="selected" ';
+		endif;
+
+		// build our option html
+		$option = '<option value="' . $value . '" '. $selected .'>';
+		$option .= $page->post_title;
+		$option .= '</option>';
+
+		// append our option to the select html
+		$select .= $option;
+
+	endforeach;
+
+	// close our select html tag
+	$select .= '</select>';
+
+	// return our new select
+	return $select;
+
+}
+
 
 /* !7. CUSTOM POST TYPES */
 // 7.1 - subscribers
@@ -563,18 +633,78 @@ function elb_import_admin_page() {
 // hint: plugin options admin page
 function elb_options_admin_page() {
 
-
-	$output = '
-		<div class="wrap">
-			
-			<h2>Email List Builder Options</h2>
-			
-			<p>Page description...</p>
+	echo('<div class="wrap">
 		
-		</div>
-	';
+		<h2>Email List Builder Options</h2>
+		
+		<form action="options.php" method="post">
+			
+			<table class="form-table">
+			
+				<tbody>
+			
+					<tr>
+						<th scope="row"><label for="elb_manage_subscription_page_id">Manage Subscriptions Page</label></th>
+						<td>
+							'. elb_get_page_select( 'elb_manage_subscription_page_id', 'elb_manage_subscription_page_id', 0, 'id', '') .'
+							<p class="description" id="elb_manage_subscription_page_id-description">This is the page where Email List Builder will send subscribers to manage their subscriptions. <br />
+								IMPORTANT: the page you select must contain the shortcode: <strong>[elb_manage_subscriptions]</strong>.</p>
+						</td>
+					</tr>
+					
+			
+					<tr>
+						<th scope="row"><label for="elb_confirmation_page_id">Opt-In Page</label></th>
+						<td>
+							'. elb_get_page_select( 'elb_confirmation_page_id', 'elb_confirmation_page_id', 0, 'id', '' ) .'
+							<p class="description" id="elb_confirmation_page_id-description">This is the page where Email List Builder will send subscribers to confirm their subscriptions. <br />
+								IMPORTANT: the page you select must contain the shortcode: <strong>[elb_confirm_subscription]</strong>.</p>
+						</td>
+					</tr>
+					
+			
+					<tr>
+						<th scope="row"><label for="elb_reward_page_id">Download Reward Page</label></th>
+						<td>
+							'. elb_get_page_select( 'elb_reward_page_id', 'elb_reward_page_id', 0, 'id', '' ) .'
+							<p class="description" id="elb_reward_page_id-description">This is the page where Email List Builder will send subscribers to retrieve their reward downloads. <br />
+								IMPORTANT: the page you select must contain the shortcode: <strong>[elb_download_reward]</strong>.</p>
+						</td>
+					</tr>
+			
+					<tr>
+						<th scope="row"><label for="elb_default_email_footer">Email Footer</label></th>
+						<td>');
 
-	echo $output;
+
+							// wp_editor will act funny if it's stored in a string so we run it like this...
+							wp_editor( '', 'elb_default_email_footer', [ 'textarea_rows' => 8 ] );
+
+
+							echo('<p class="description" id="elb_default_email_footer-description">The default text that appears at the end of emails generated by this plugin.</p>
+						</td>
+					</tr>
+			
+					<tr>
+						<th scope="row"><label for="elb_download_limit">Reward Download Limit</label></th>
+						<td>
+							<input type="number" name="elb_download_limit" value="0" class="" />
+							<p class="description" id="elb_download_limit-description">The amount of downloads a reward link will allow before expiring.</p>
+						</td>
+					</tr>
+			
+				</tbody>
+				
+			</table>
+		
+			<p class="submit">
+				<input type="submit" name="submit" id="submit" class="button button-primary" value="Save Changes">
+			</p>
+		
+		
+		</form>
+	
+	</div>');
 
 }
 
