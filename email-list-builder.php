@@ -17,6 +17,8 @@
 	  1.5 - load external files to public website
 	  1.6 - Advanced Custom Fields Settings
 		1.7 - register custom menus
+		1.9 - register plugin options
+
 
 	2. SHORTCODES
 		2.1 - elb_register_shortcodes()
@@ -50,6 +52,9 @@
 		6.5 - elb_get_acf_key()
 		6.6 - elb_get_subscriber_data()
 		6.7 - elb_get_page_select()
+		6.8 - elb_get_default_page_options()
+		6.9 - elb_get_option()
+		6.10 - elb_get_current_options()
 
 	7. CUSTOM POST TYPES
 		7.1 - subscribers
@@ -61,6 +66,7 @@
 		8.3 - elb_options_admin_page()
 
 	9. SETTINGS
+		9.1 - elb_register_options()
 
 	10. MISCELLANEOUS
 
@@ -100,6 +106,9 @@ if( !defined('ACF_LITE') ) define('ACF_LITE',true); // turn off ACF plugin menu
 
 // 1.7 - register custom menus
 add_action('admin_menu', 'elb_admin_menus');
+
+// 1.9 - register plugin options
+add_action('admin_init', 'elb_register_options');
 
 
 
@@ -578,6 +587,110 @@ function elb_get_page_select( $input_name="elb_page", $input_id="", $parent=-1, 
 
 }
 
+// 6.8
+function elb_get_default_options()
+{
+	$defaults = [];
+
+	try {
+		// get front page id
+		$front_page_id = get_option('page_on_front');
+
+		// setup default email footer
+		$email_footer = '
+			<p>
+				Sincerely, <br /><br />
+				The '. get_bloginfo('name') .' Team<br />
+				<a href="'. get_bloginfo('url') .'">'. get_bloginfo('url') .'</a>
+			</p>
+		';
+
+		// setup defaults array
+		$defaults = [
+			'elb_manage_subscription_page_id' => $front_page_id,
+			'elb_confirmation_page_id'        => $front_page_id,
+			'elb_reward_page_id'              => $front_page_id,
+			'elb_email_footer'                => $email_footer,
+			'elb_download_limit'              => 3,
+		];
+
+	} catch( Exception $e) {}
+
+	// return defaults
+	return $defaults;
+
+}
+
+// 6.9
+function elb_get_option($option_name)
+{
+
+	try {
+
+		// get default option values
+		$defaults = elb_get_default_options();
+
+		// get the requested option
+		switch( $option_name ) {
+
+			// subscription page id
+			case 'elb_manage_subscription_page_id':
+				return get_option('elb_manage_subscription_page_id') ?
+					get_option('elb_manage_subscription_page_id') :
+					$defaults['elb_manage_subscription_page_id'];
+
+			// confirmation page id
+			case 'elb_confirmation_page_id':
+				return get_option('elb_confirmation_page_id') ?
+					get_option('elb_confirmation_page_id') :
+					$defaults['elb_confirmation_page_id'];
+
+			// reward page id
+			case 'elb_reward_page_id':
+				return get_option('elb_reward_page_id') ?
+					get_option('elb_reward_page_id') :
+					$defaults['elb_reward_page_id'];
+
+			// email footer
+			case 'elb_email_footer':
+				return get_option('elb_email_footer') ?
+					get_option('elb_email_footer') :
+					$defaults['elb_email_footer'];
+
+			// reward download limit
+			case 'elb_download_limit':
+				return get_option('elb_download_limit') ?
+					(int)get_option('elb_download_limit') :
+					$defaults['elb_download_limit'];
+		}
+
+	} catch( Exception $e) {}
+
+	// default
+	return '';
+
+}
+
+// 6.10
+function elb_get_current_options()
+{
+	$current_options = [];
+
+	try {
+		$current_options = [
+			'elb_manage_subscription_page_id' => elb_get_option('elb_manage_subscription_page_id'),
+			'elb_confirmation_page_id'        => elb_get_option('elb_confirmation_page_id'),
+			'elb_reward_page_id'              => elb_get_option('elb_reward_page_id'),
+			'elb_email_footer'                => elb_get_option('elb_email_footer'),
+			'elb_download_limit'              => elb_get_option('elb_download_limit'),
+		];
+
+	} catch (Exception $exception) {}
+
+	return $current_options;
+}
+
+
 
 /* !7. CUSTOM POST TYPES */
 // 7.1 - subscribers
@@ -633,22 +746,30 @@ function elb_import_admin_page() {
 // hint: plugin options admin page
 function elb_options_admin_page() {
 
+	// get the default values for our options
+	$options = elb_get_current_options();
+
 	echo('<div class="wrap">
 		
 		<h2>Email List Builder Options</h2>
 		
-		<form action="options.php" method="post">
-			
-			<table class="form-table">
+		<form action="options.php" method="post">');
+
+			// outputs a unique nounce for our plugin options
+			settings_fields('elb_plugin_options');
+			// generates a unique hidden field with our form handling url
+			@do_settings_fields('elb_plugin_options');
+
+			echo('<table class="form-table">
 			
 				<tbody>
 			
 					<tr>
 						<th scope="row"><label for="elb_manage_subscription_page_id">Manage Subscriptions Page</label></th>
 						<td>
-							'. elb_get_page_select( 'elb_manage_subscription_page_id', 'elb_manage_subscription_page_id', 0, 'id', '') .'
+							'. elb_get_page_select( 'elb_manage_subscription_page_id', 'elb_manage_subscription_page_id', 0, 'id', $options['elb_manage_subscription_page_id'] ) .'
 							<p class="description" id="elb_manage_subscription_page_id-description">This is the page where Email List Builder will send subscribers to manage their subscriptions. <br />
-								IMPORTANT: the page you select must contain the shortcode: <strong>[elb_manage_subscriptions]</strong>.</p>
+								IMPORTANT: In order to work, the page you select must contain the shortcode: <strong>[elb_manage_subscriptions]</strong>.</p>
 						</td>
 					</tr>
 					
@@ -656,9 +777,9 @@ function elb_options_admin_page() {
 					<tr>
 						<th scope="row"><label for="elb_confirmation_page_id">Opt-In Page</label></th>
 						<td>
-							'. elb_get_page_select( 'elb_confirmation_page_id', 'elb_confirmation_page_id', 0, 'id', '' ) .'
+							'. elb_get_page_select( 'elb_confirmation_page_id', 'elb_confirmation_page_id', 0, 'id', $options['elb_confirmation_page_id'] ) .'
 							<p class="description" id="elb_confirmation_page_id-description">This is the page where Email List Builder will send subscribers to confirm their subscriptions. <br />
-								IMPORTANT: the page you select must contain the shortcode: <strong>[elb_confirm_subscription]</strong>.</p>
+								IMPORTANT: In order to work, the page you select must contain the shortcode: <strong>[elb_confirm_subscription]</strong>.</p>
 						</td>
 					</tr>
 					
@@ -666,43 +787,42 @@ function elb_options_admin_page() {
 					<tr>
 						<th scope="row"><label for="elb_reward_page_id">Download Reward Page</label></th>
 						<td>
-							'. elb_get_page_select( 'elb_reward_page_id', 'elb_reward_page_id', 0, 'id', '' ) .'
+							'. elb_get_page_select( 'elb_reward_page_id', 'elb_reward_page_id', 0, 'id', $options['elb_reward_page_id'] ) .'
 							<p class="description" id="elb_reward_page_id-description">This is the page where Email List Builder will send subscribers to retrieve their reward downloads. <br />
-								IMPORTANT: the page you select must contain the shortcode: <strong>[elb_download_reward]</strong>.</p>
+								IMPORTANT: In order to work, the page you select must contain the shortcode: <strong>[elb_download_reward]</strong>.</p>
 						</td>
 					</tr>
 			
 					<tr>
-						<th scope="row"><label for="elb_default_email_footer">Email Footer</label></th>
+						<th scope="row"><label for="elb_email_footer">Email Footer</label></th>
 						<td>');
 
 
 							// wp_editor will act funny if it's stored in a string so we run it like this...
-							wp_editor( '', 'elb_default_email_footer', [ 'textarea_rows' => 8 ] );
+							wp_editor( $options['elb_email_footer'], 'elb_email_footer', [ 'textarea_rows' => 8 ] );
 
 
-							echo('<p class="description" id="elb_default_email_footer-description">The default text that appears at the end of emails generated by this plugin.</p>
+							echo('<p class="description" id="elb_email_footer-description">The default text that appears at the end of emails generated by this plugin.</p>
 						</td>
 					</tr>
 			
 					<tr>
 						<th scope="row"><label for="elb_download_limit">Reward Download Limit</label></th>
 						<td>
-							<input type="number" name="elb_download_limit" value="0" class="" />
+							<input type="number" name="elb_download_limit" value="'. $options['elb_download_limit'] .'" class="" />
 							<p class="description" id="elb_download_limit-description">The amount of downloads a reward link will allow before expiring.</p>
 						</td>
 					</tr>
 			
 				</tbody>
 				
-			</table>
-		
-			<p class="submit">
-				<input type="submit" name="submit" id="submit" class="button button-primary" value="Save Changes">
-			</p>
-		
-		
-		</form>
+			</table>');
+
+	// outputs the WP submit button html
+	@submit_button();
+
+
+	echo('</form>
 	
 	</div>');
 
@@ -711,7 +831,14 @@ function elb_options_admin_page() {
 
 
 /* !9. SETTINGS */
-
+function elb_register_options()
+{
+	register_setting('elb_plugin_options', 'elb_manage_subscription_page_id');
+	register_setting('elb_plugin_options', 'elb_confirmation_page_id');
+	register_setting('elb_plugin_options', 'elb_reward_page_id');
+	register_setting('elb_plugin_options', 'elb_email_footer');
+	register_setting('elb_plugin_options', 'elb_download_limit');
+}
 
 
 
