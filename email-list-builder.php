@@ -16,6 +16,7 @@
 		1.4 - register ajax actions
 	  1.5 - load external files to public website
 	  1.6 - Advanced Custom Fields Settings
+		1.7 - register custom menus
 
 	2. SHORTCODES
 		2.1 - elb_register_shortcodes()
@@ -28,6 +29,8 @@
       3.2.3 - elb_custom_admin_titles()
 		3.3 - elb_list_column_headers()
 		3.4 - elb_list_column_data()
+		3.5 - elb_admin_menus()
+
 
 	4. EXTERNAL SCRIPTS
 		4.1 - include ACF
@@ -52,6 +55,9 @@
 		7.2 - lists
 
 	8. ADMIN PAGES
+		8.1 - elb_dashboard_admin_page()
+		8.2 - elb_import_admin_page()
+		8.3 - elb_options_admin_page()
 
 	9. SETTINGS
 
@@ -91,6 +97,9 @@ add_filter('acf/settings/dir', 'elb_acf_settings_dir');
 add_filter('acf/settings/show_admin', 'elb_acf_show_admin');
 if( !defined('ACF_LITE') ) define('ACF_LITE',true); // turn off ACF plugin menu
 
+// 1.7 - register custom menus
+add_action('admin_menu', 'elb_admin_menus');
+
 
 
 /* !2. SHORTCODES */
@@ -117,11 +126,11 @@ function elb_form_shortcode($args, $content = '')
 			  action="' . admin_url() . 'admin-ajax.php?action=elb_save_subscription">
 			  
 			  <input type="hidden" name="elb_list" value="' . $list_id . '">';
-			
+
 	if( strlen($title) )
 		$output .= '<h3 class="elb-title">'. $title .'</h3>';
-				
-				
+
+
 			$output .=	'
 				<p class="elb-input-container">
 					<label>Your Name</label><br />
@@ -236,6 +245,23 @@ function elb_list_column_data($columns, $post_id)
       break;
   }
   echo $output;
+}
+
+// 3.5
+function elb_admin_menus()
+{
+	// main menu
+	$top_menu_item = 'elb_dashboard_admin_page';
+
+	add_menu_page('', 'List Builder', 'manage_options', $top_menu_item, $top_menu_item, 'dashicons-email-alt');
+
+	// submenu items
+	add_submenu_page($top_menu_item, '', 'Dashboard', 'manage_options', $top_menu_item);
+	add_submenu_page($top_menu_item, '', 'Email Lists', 'manage_options','edit.php?post_type=elb_list');
+	add_submenu_page($top_menu_item, '', 'Subscribers', 'manage_options','edit.php?post_type=elb_subscriber');
+	add_submenu_page($top_menu_item, '', 'Import Subscribers', 'manage_options','elb_import_admin_page', 'elb_import_admin_page');
+	add_submenu_page($top_menu_item, '', 'Settings', 'manage_options','elb_options_admin_page', 'elb_options_admin_page');
+
 }
 
 
@@ -433,7 +459,7 @@ function elb_get_subscriber_id($email)
 
   }
 
-  // reset query init by have_posts()
+  // reset query init by tbe_post()
   wp_reset_query();
   return (int)$subscriber_id;
 }
@@ -495,6 +521,62 @@ include_once( plugin_dir_path( __FILE__ ) . 'cpt/elb_list.php');
 
 /* !8. ADMIN PAGES */
 
+// 8.1
+// hint: dashboard admin page
+function elb_dashboard_admin_page() {
+
+
+	$output = '
+		<div class="wrap">
+			
+			<h2>Email List Builder</h2>
+			
+			<p>The ultimate email list building plugin for WordPress. Capture new subscribers. Reward subscribers with a custom download upon opt-in. Build unlimited lists. Import and export subscribers easily with .csv</p>
+		
+		</div>
+	';
+
+	echo $output;
+
+}
+
+// 8.2
+// hint: import subscribers admin page
+function elb_import_admin_page() {
+
+
+	$output = '
+		<div class="wrap">
+			
+			<h2>Import Subscribers</h2>
+			
+			<p>Page description...</p>
+		
+		</div>
+	';
+
+	echo $output;
+
+}
+
+// 8.3
+// hint: plugin options admin page
+function elb_options_admin_page() {
+
+
+	$output = '
+		<div class="wrap">
+			
+			<h2>Email List Builder Options</h2>
+			
+			<p>Page description...</p>
+		
+		</div>
+	';
+
+	echo $output;
+
+}
 
 
 
