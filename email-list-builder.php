@@ -19,10 +19,10 @@
 		1.7 - register custom menus
 		1.9 - register plugin options
 
-
 	2. SHORTCODES
 		2.1 - elb_register_shortcodes()
 		2.2 - elb_form_shortcode()
+		2.3 - elb_manage_subscriptions_shortcode()
 
 	3. FILTERS
 		3.1 - elb_subscriber_column_headers()
@@ -33,16 +33,16 @@
 		3.4 - elb_list_column_data()
 		3.5 - elb_admin_menus()
 
-
 	4. EXTERNAL SCRIPTS
 		4.1 - include ACF
 		4.2 - elb_public_scripts()
-
 
 	5. ACTIONS
 		5.1 - elb_save_subscription()
 		5.2 - elb_save_subscriber()
 		5.3 - elb_add_subscription()
+		5.4 - elb_unsubscribe()
+		5.5 - elb_remove_subscriptions()
 
 	6. HELPERS
 		6.1 - elb_subscriber_has_subscription()
@@ -55,6 +55,7 @@
 		6.8 - elb_get_default_page_options()
 		6.9 - elb_get_option()
 		6.10 - elb_get_current_options()
+		6.11 - elb_get_manage_subscriptions_html()
 
 	7. CUSTOM POST TYPES
 		7.1 - subscribers
@@ -94,6 +95,8 @@ add_action('admin_head-edit.php', 'elb_register_custom_admin_titles');
 // 1.4 - register ajax actions
 add_action('wp_ajax_nopriv_elb_save_subscription', 'elb_save_subscription'); // regular website visitor
 add_action('wp_ajax_elb_save_subscription', 'elb_save_subscription'); // admin user
+add_action('wp_ajax_nopriv_elb_unsubscribe', 'elb_unsubscribe'); // regular website visitor
+add_action('wp_ajax_elb_unsubscribe', 'elb_unsubscribe'); // admin user
 
 // 1.5 - load external files to public website
 add_action('wp_enqueue_scripts', 'elb_public_scripts');
@@ -118,6 +121,8 @@ add_action('admin_init', 'elb_register_options');
 function elb_register_shortcodes()
 {
   add_shortcode('elb_form', 'elb_form_shortcode');
+	add_shortcode('elb_manage_subscriptions', 'elb_manage_subscriptions_shortcode');
+
 }
 
 // 2.2 - return html subscription form
@@ -132,7 +137,7 @@ function elb_form_shortcode($args, $content = '')
   $output = '
     <div class="elb">
 		
-			<form id="elb_form" name="elb_form" class="elb-form" method="post"
+			<form id="elb_register_form" name="elb_form" class="elb-form" method="post"
 			  action="' . admin_url() . 'admin-ajax.php?action=elb_save_subscription">
 			  
 			  <input type="hidden" name="elb_list" value="' . $list_id . '">';
@@ -170,6 +175,41 @@ function elb_form_shortcode($args, $content = '')
   return $output;
 }
 
+// 2.3
+// hint: displays a form for managing the users list subscriptions
+// example: [elb_manage_subscriptions]
+function elb_manage_subscriptions_shortcode( $args, $content = '' )
+{
+	// setup return string
+	$output = '<div class="elb elb-manage-subscriptions">';
+
+	try {
+
+		// get the email address from the URL
+		$email = ( isset( $_GET['email'] ) ) ? sanitize_email( $_GET['email'] ) : '';
+
+		// get the subscriber id from the email address
+		$subscriber_id = elb_get_subscriber_id( $email );
+
+		// IF subscriber exists
+		if( $subscriber_id ) {
+			// get subscriptions html
+			$output .= elb_get_manage_subscriptions_html( $subscriber_id );
+		}
+		else {
+			// invalid link
+			$output .= '<p>This link is invalid.</p>';
+		}
+
+	} catch(Exception $exception) {}
+
+	// close our html div tag
+	$output .= '</div>';
+
+	// return our html
+	return $output;
+
+}
 
 
 /* !3. FILTERS */
@@ -423,6 +463,64 @@ function elb_add_subscription($subscriber_id, $list_id)
 }
 
 
+// 5.4
+// hint: removes one or more subscriptions from a subscriber and notifies them via email
+// this function is a ajax form handler...
+// expects form post data: $_POST['subscriber_id'] and $_POST['list_id']
+function elb_unsubscribe()
+{
+	// setup default result data
+	$result = [
+		'status'  => 0,
+		'message' => 'Subscriptions were NOT updated. ',
+		'error'   => '',
+		'errors'  => [],
+	];
+
+	$list_ids = ( isset($_POST['list_ids']) ) ? $_POST['list_ids'] : [];
+	$subscriber_id = ( isset($_POST['subscriber_id']) ) ? esc_attr( (int)$_POST['subscriber_id'] ) : 0;
+
+	// validate if subscription is selected
+	if (empty($list_ids)) {
+		$result['error'] = 'Please select the subscriptions';
+		elb_return_json( $result );
+	}
+
+	try {
+
+		elb_remove_subscriptions( $subscriber_id, $list_ids );
+
+		// setup success status and message
+		$result['status'] = 1;
+		$result['message'] = 'Subscriptions updated. ';
+
+		// get the updated list of subscriptions as html
+		$result['html'] = elb_get_manage_subscriptions_html( $subscriber_id );
+
+	} catch( Exception $exception ) {}
+
+	// return result as json
+	elb_return_json( $result );
+
+}
+
+// 5.5
+// hint: removes a single subscription from a subscriber
+function elb_remove_subscriptions( $subscriber_id, $unsubscribed_list_ids )
+{
+	// get current subscriptions
+	$subscriptions = elb_get_subscriptions( $subscriber_id );
+
+	// remove unsubscribed lists
+	$subscriptions = array_diff($subscriptions, $unsubscribed_list_ids);
+
+	// update elb_subscriptions
+	update_field(elb_get_acf_key( 'elb_subscriptions'), $subscriptions, $subscriber_id);
+
+}
+
+
+
 /* !6. HELPERS */
 
 // 6.1
@@ -517,6 +615,37 @@ function elb_get_acf_key($field_name)
   }
   return $field_name;
 }
+
+// 6.6
+// hint: returns an array of subscriber data including subscriptions
+function elb_get_subscriber_data( $subscriber_id )
+{
+	// setup subscriber_data
+	$subscriber_data = [];
+
+	// get subscriber object
+	$subscriber = get_post( $subscriber_id );
+
+	// IF subscriber object is valid
+	if( isset($subscriber->post_type) && $subscriber->post_type == 'elb_subscriber' )
+	{
+		$fname = get_field( elb_get_acf_key( 'elb_fname' ), $subscriber_id );
+		$lname = get_field( elb_get_acf_key( 'elb_lname' ), $subscriber_id );
+
+		// build subscriber_data for return
+		$subscriber_data = [
+			'name'          => $fname . ' ' . $lname,
+			'fname'         => $fname,
+			'lname'         => $lname,
+			'email'         => get_field( elb_get_acf_key( 'elb_email' ), $subscriber_id ),
+			'subscriptions' => elb_get_subscriptions( $subscriber_id )
+		];
+	}
+	// return subscriber_data
+	return $subscriber_data;
+
+}
+
 
 // 6.7
 // hint: returns html for a page selector
@@ -614,7 +743,7 @@ function elb_get_default_options()
 			'elb_download_limit'              => 3,
 		];
 
-	} catch( Exception $e) {}
+	} catch( Exception $exception) {}
 
 	// return defaults
 	return $defaults;
@@ -664,7 +793,7 @@ function elb_get_option($option_name)
 					$defaults['elb_download_limit'];
 		}
 
-	} catch( Exception $e) {}
+	} catch( Exception $exception) {}
 
 	// default
 	return '';
@@ -690,6 +819,79 @@ function elb_get_current_options()
 	return $current_options;
 }
 
+// 6.11
+// hint: generates an html form for managing subscriptions
+function elb_get_manage_subscriptions_html( $subscriber_id )
+{
+	$output = '';
+
+	try {
+		// get the subscriber data
+		$subscriber_data = elb_get_subscriber_data( $subscriber_id );
+
+		// get subscriptions
+		$lists = $subscriber_data['subscriptions'];
+
+		// set the title
+		$title = $subscriber_data['fname'] .'\'s Subscriptions';
+
+		// build out output html
+		$output = '
+			<form id="elb_manage_subscriptions_form" class="elb-form" method="post"
+	      action="' . admin_url() . 'admin-ajax.php?action=elb_unsubscribe">
+				
+				<input type="hidden" name="subscriber_id" value="'. $subscriber_id .'">
+				
+				<h3 class="elb-title">'. $title .'</h3>';
+
+		if( !count($lists) ):
+
+			$output .='<p>There are no active subscriptions.</p>';
+
+		else:
+
+			$output .= '<table>
+						<tbody>';
+
+			// loop over lists
+			foreach( $lists as &$list_id ):
+
+				$list_object = get_post( $list_id );
+
+				$output .= '<tr>
+								<td>'.
+				           $list_object->post_title
+				           .'</td>
+								<td>
+									<label>
+										<input 
+											type="checkbox" name="list_ids[]" 
+											value="'. $list_object->ID .'" 
+										/> UNSUBSCRIBE
+									</label>
+								</td>
+							</tr>';
+
+			endforeach;
+
+			// close up our output html
+			$output .='</tbody>
+					</table>
+					
+					<p><input type="submit" value="Save Changes" /></p>';
+
+		endif;
+
+		$output .='
+				</form>
+			';
+
+	} catch( Exception $exception ) {}
+
+	// return output
+	return $output;
+
+}
 
 
 /* !7. CUSTOM POST TYPES */
@@ -706,9 +908,8 @@ include_once( plugin_dir_path( __FILE__ ) . 'cpt/elb_list.php');
 
 // 8.1
 // hint: dashboard admin page
-function elb_dashboard_admin_page() {
-
-
+function elb_dashboard_admin_page()
+{
 	$output = '
 		<div class="wrap">
 			
@@ -725,9 +926,8 @@ function elb_dashboard_admin_page() {
 
 // 8.2
 // hint: import subscribers admin page
-function elb_import_admin_page() {
-
-
+function elb_import_admin_page()
+{
 	$output = '
 		<div class="wrap">
 			
@@ -744,8 +944,8 @@ function elb_import_admin_page() {
 
 // 8.3
 // hint: plugin options admin page
-function elb_options_admin_page() {
-
+function elb_options_admin_page()
+{
 	// get the default values for our options
 	$options = elb_get_current_options();
 
