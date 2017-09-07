@@ -629,7 +629,7 @@ function elb_send_subscriber_email( $subscriber_id, $email_template_name, $list_
 		$subscriber_data = elb_get_subscriber_data( $subscriber_id );
 
 		// set wp_mail headers
-		$wp_mail_headers = array( 'Content-Type: text/html; charset=UTF-8' );
+		$wp_mail_headers = [ 'Content-Type: text/html; charset=UTF-8' ];
 
 //		$email_sent = true;
 
@@ -649,9 +649,12 @@ function elb_confirm_subscription( $subscriber_id, $list_id )
 	$subscription_saved = elb_add_subscription( $subscriber_id, $list_id );
 
 	// IF subscription was saved
-	if( $subscription_saved )
-		return true;
-
+	if ( $subscription_saved ) {
+		// send thank you email
+		$email_sent = elb_send_subscriber_email( $subscriber_id, 'subscription_confirmed', $list_id );
+		if ($email_sent)
+			return true;
+	}
 	return false;
 }
 
@@ -1087,6 +1090,15 @@ function elb_get_email_template( $subscriber_id, $email_template_name, $list_id 
 					'. $default_email_header .'
 					<p>Thank you for subscribing to '. $list->post_title .'!</p>
 					<p>Please <a href="'. $optin_link .'">click here to confirm your subscription.</a></p>
+					'. $default_email_footer . $unsubscribe_text,
+		];
+
+		// template: subscription_confirmed
+		$email_templates['subscription_confirmed'] = [
+			'subject' => 'You are now subscribed to '. $list->post_title .'!',
+			'body' => '
+					'. $default_email_header .'
+					<p>Thank you for confirming your subscription. You are now subscribed to '. $list->post_title .'!</p>
 					'. $default_email_footer . $unsubscribe_text,
 		];
 
