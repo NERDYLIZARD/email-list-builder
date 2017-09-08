@@ -66,6 +66,7 @@
 		6.16 - elb_get_querystring_start()
 		6.17 - elb_get_optin_link()
 		6.18 - elb_get_message_html()
+		6.19 - elb_get_list_reward()
 
 	7. CUSTOM POST TYPES
 		7.1 - subscribers
@@ -361,6 +362,7 @@ function elb_list_column_headers($column)
   $columns = [
     'cb'        => '<input type="checkbox"/>',
     'title'     => __('List Name'),
+    'reward'     => __('Optin Reward'),
 	  'shortcode' => __('Short Code')
   ];
   return $columns;
@@ -372,7 +374,12 @@ function elb_list_column_data($columns, $post_id)
   $output = '';
 
   switch ($columns) {
-    // just template for now
+	  case 'reward':
+		  $reward = elb_get_list_reward( $post_id );
+		  if ( !empty($reward) )
+			  $output .= '<a href="' . $reward['file']['url'] . '" download="' . $reward['title'] . '">' . $reward['title'] . '</a>';
+		  break;
+
     case 'shortcode':
 	    $output .= '[elb_form id="'. $post_id .'"]';
       break;
@@ -743,6 +750,7 @@ function elb_get_acf_key($field_name)
 {
   // field_id extract from Advanced Custom Field form
   switch ($field_name) {
+  	// subscriber settings
     case 'elb_fname':
       return 'field_59aa6f41ef4d5';
     case 'elb_lname':
@@ -751,6 +759,17 @@ function elb_get_acf_key($field_name)
       return 'field_59aa6f96ef4d7';
     case 'elb_subscriptions':
       return 'field_59aa6fbaef4d8';
+
+	  // list settings
+	  case 'elb_enable_reward':
+		  return 'field_59b210ccd9a69';
+		  break;
+	  case 'elb_reward_title':
+		  return 'field_59b2116ad9a6a';
+		  break;
+	  case 'elb_reward_file':
+		  return 'field_59b211b6d9a6b';
+		  break;
   }
   return $field_name;
 }
@@ -1243,6 +1262,47 @@ function elb_get_message_html( $message, $message_type ) {
 	}
 
 	return $output;
+
+}
+
+
+// 6.19
+// hint: returns false if list has no reward or returns the object containing file and title if it does
+function elb_get_list_reward( $list_id ) {
+
+	// setup return data
+	$reward_data = [];
+
+	// get enable_reward value
+	$enable_reward = ( get_field( elb_get_acf_key('elb_enable_reward'), $list_id) ) ? true : false;
+
+	// IF reward is enabled for this list
+	if( $enable_reward ) {
+
+		// get reward file
+		$reward_file = ( get_field( elb_get_acf_key( 'elb_reward_file' ), $list_id ) ) ?
+										get_field( elb_get_acf_key( 'elb_reward_file' ), $list_id ) :
+										false;
+		// get reward title
+		$reward_title = ( get_field( elb_get_acf_key( 'elb_reward_title' ), $list_id ) ) ?
+										get_field( elb_get_acf_key( 'elb_reward_title' ), $list_id ) :
+										'Reward';
+
+
+		// IF reward_file is a valid array
+		if ( is_array( $reward_file ) ) {
+
+
+			// setup return data
+			$reward_data = [
+				'file'  => $reward_file,
+				'title' => $reward_title,
+			];
+
+		}
+	}
+	// return $reward_data
+	return $reward_data;
 
 }
 
