@@ -18,6 +18,7 @@
 	  1.6 - Advanced Custom Fields Settings
 		1.7 - register custom menus
 		1.9 - register plugin options
+		1.10 - register activate/deactivate/uninstall functions
 
 	2. SHORTCODES
 		2.1 - elb_register_shortcodes()
@@ -46,6 +47,8 @@
 		5.5 - elb_remove_subscriptions()
 		5.6 - elb_send_subscriber_email()
 		5.7 - elb_confirm_subscription()
+		5.8 - elb_create_plugin_tables()
+		5.9 - elb_activate_plugin()
 
 	6. HELPERS
 		6.1 - elb_subscriber_has_subscription()
@@ -123,6 +126,9 @@ add_action('admin_menu', 'elb_admin_menus');
 
 // 1.9 - register plugin options
 add_action('admin_init', 'elb_register_options');
+
+// 1.10 - register activate/deactivate/uninstall functions
+register_activation_hook(__FILE__, 'elb_activate_plugin');
 
 
 /* !2. SHORTCODES */
@@ -665,6 +671,57 @@ function elb_confirm_subscription( $subscriber_id, $list_id )
 	return false;
 }
 
+// 5.8
+// hint: creates custom tables for our plugin
+function elb_create_plugin_tables()
+{
+	global $wpdb;
+
+	// setup return value
+	$return_value = false;
+
+	try {
+
+		$table_name = $wpdb->prefix . "elb_reward_links";
+		$charset_collate = $wpdb->get_charset_collate();
+
+		// sql for our table creation
+		$sql = "CREATE TABLE $table_name (
+			id mediumint(11) NOT NULL AUTO_INCREMENT,
+			uid varchar(128) NOT NULL,
+			subscriber_id mediumint(11) NOT NULL,
+			list_id mediumint(11) NOT NULL,
+			attachment_id mediumint(11) NOT NULL,
+			downloads mediumint(11) DEFAULT 0 NOT NULL ,
+			UNIQUE KEY id (id)
+			) $charset_collate;";
+
+		// make sure we include wordpress functions for dbDelta
+		require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+
+		// dbDelta will create a new table if none exists or update an existing one
+		dbDelta($sql);
+
+		// return true
+		$return_value = true;
+
+	} catch( Exception $e ) {
+
+		// php error
+
+	}
+
+	// return result
+	return $return_value;
+
+}
+
+// 5.9
+function elb_activate_plugin()
+{
+	// setup DB table
+	elb_create_plugin_tables();
+}
 
 
 /* !6. HELPERS */
