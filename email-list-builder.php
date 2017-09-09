@@ -54,6 +54,7 @@
 		5.10 - elb_add_reward_link()
 		5.11 - elb_trigger_reward_download()
 		5.12 - elb_update_reward_link_downloads()
+		5.13 - elb_download_subscribers_csv()
 
 	6. HELPERS
 		6.1 - elb_subscriber_has_subscription()
@@ -78,6 +79,9 @@
 		6.20 - elb_get_reward_link()
 		6.21 - elb_generate_reward_uid()
 		6.22 - elb_get_reward()
+		6.23 - elb_get_list_subscribers()
+		6.24 - elb_get_list_subscriber_count()
+		6.25 - elb_get_csv_export_link()
 
 	7. CUSTOM POST TYPES
 		7.1 - subscribers
@@ -119,6 +123,8 @@ add_action('wp_ajax_nopriv_elb_save_subscription', 'elb_save_subscription'); // 
 add_action('wp_ajax_elb_save_subscription', 'elb_save_subscription'); // admin user
 add_action('wp_ajax_nopriv_elb_unsubscribe', 'elb_unsubscribe'); // regular website visitor
 add_action('wp_ajax_elb_unsubscribe', 'elb_unsubscribe'); // admin user
+add_action('wp_ajax_elb_download_subscribers_csv', 'elb_download_subscribers_csv'); // admin users
+
 
 // 1.5 - load external files to public website
 add_action('wp_enqueue_scripts', 'elb_public_scripts');
@@ -403,10 +409,11 @@ function elb_list_column_headers($column)
 {
   // custom header fields
   $columns = [
-    'cb'        => '<input type="checkbox"/>',
-    'title'     => __('List Name'),
-    'reward'     => __('Optin Reward'),
-	  'shortcode' => __('Short Code')
+    'cb'          => '<input type="checkbox"/>',
+    'title'       => __('List Name'),
+    'reward'      => __('Optin Reward'),
+	  'subscribers' => __('Subscribers'),
+	  'shortcode'   => __('Short Code')
   ];
   return $columns;
 }
@@ -422,6 +429,13 @@ function elb_list_column_data($columns, $post_id)
 		  if ( $reward )
 			  $output .= '<a href="' . $reward['file']['url'] . '" download="' . $reward['title'] . '">' . $reward['title'] . '</a>';
 		  break;
+
+    case 'subscribers':
+    	$subscriber_count = elb_get_list_subscriber_count($post_id);
+    	$export_href = elb_get_csv_export_link($post_id);
+	    $output .= $subscriber_count;
+	    $output .= $subscriber_count ? ' <a href="' . $export_href . '">Export</a>' : '';
+      break;
 
     case 'shortcode':
 	    $output .= '[elb_form id="'. $post_id .'"]';
@@ -859,6 +873,77 @@ function elb_update_reward_link_downloads( $uid )
 
 }
 
+// 5.13
+// hint: generates a .csv file of subscribers data
+// expects $_GET['list_id'] as URL's query
+function elb_download_subscribers_csv()
+{
+	$list_id = (isset($_GET['list_id'])) ? (int)$_GET['list_id'] : 0;
+
+	// get array of subscriber's ids of the list
+	$subscriber_ids = elb_get_list_subscribers($list_id);
+
+	if (!$subscriber_ids)
+		return false;
+
+
+	// get current time
+	try {
+		$now = new DateTime();
+	} catch (Exception $exception) {
+		echo $exception->getMessage();
+		return false;
+	}
+
+	// generate filename for exporting file
+	$csv_filename = 'email-list-builder-export-list_id-'. $list_id .'-date-'. $now->format('d-m-Y'). '.csv';
+	$fullpath_csv_filename = plugin_dir_path(__FILE__) . 'exports/' . $csv_filename;
+
+	// open new file in write mode
+	$csv_file = fopen($fullpath_csv_filename, 'w');
+
+	/*Set up csv headers*/
+	// by any subscriber data
+	$subscriber_data = elb_get_subscriber_data($subscriber_ids[0]);
+
+	// remove name and subscriptions field
+	unset($subscriber_data['name']);
+	unset($subscriber_data['subscriptions']);
+
+	$csv_headers = [];
+	foreach ($subscriber_data as $header => $field)
+		$csv_headers []= $header;
+
+	// write csv_header on csv file
+	fputcsv($csv_file, $csv_headers);
+
+	/*Set up csv fields*/
+	foreach ($subscriber_ids as $subscriber_id) {
+		$subscriber_data = elb_get_subscriber_data($subscriber_id);
+		unset($subscriber_data['name']);
+		unset($subscriber_data['subscriptions']);
+
+		fputcsv($csv_file, $subscriber_data);
+	}
+
+	// open new file in read mode
+	$csv_file = fopen($fullpath_csv_filename, 'r');
+
+	// read csv file for echoing
+	$csv_data = fread($csv_file, filesize($fullpath_csv_filename));
+
+	fclose($csv_file);
+
+	// setup file headers
+	header("Content-type: application/csv");
+	header("Content-Disposition: attachment; filename=". $csv_filename);
+	// echo the contents of our file and return it to the browser
+	echo($csv_data);
+	// exit php processes
+	exit;
+
+}
+
 
 /* !6. HELPERS */
 
@@ -888,9 +973,11 @@ function elb_get_subscriber_id($email)
       'posts_per_page'  => 1,
       'meta_key'        => 'elb_email',
       'meta_query'      => [
-        'key'     => 'elb_email',
-        'value'   => $email,
-        'compare' => '='
+      	[
+	        'key'     => 'elb_email',
+	        'value'   => $email,
+	        'compare' => '='
+        ]
       ]
     ]);
 
@@ -906,8 +993,8 @@ function elb_get_subscriber_id($email)
 
   }
 
-  // reset query init by tbe_post()
-  wp_reset_query();
+  // reset post instantiated by the_post()
+  wp_reset_postdata();
   return (int)$subscriber_id;
 }
 
@@ -1609,6 +1696,76 @@ function elb_get_reward( $uid )
 	return $reward_data;
 }
 
+// 6.23
+// hint: returns an array of subscriber_id's
+function elb_get_list_subscribers( $list_id = 0 )
+{
+	$list = get_post($list_id);
+
+	try {
+		// if no argument is pass, return all subscribers from all lists
+		if ( $list_id === 0 ) {
+			$subscribers_query = new WP_Query( [
+				'post_type'      => 'elb_subscriber',
+				'published'      => true,
+				// get all
+				'posts_per_page' => - 1,
+				'orderby'        => 'post_date',
+				'order'          => 'DESC',
+			] );
+		} // there is specific list_id as argument, return only subscribers from that list
+		else if (elb_validate_list($list)) {
+			$subscribers_query = new WP_Query( [
+				'post_type'      => 'elb_subscriber',
+				'published'      => true,
+				'posts_per_page' => -1,
+				'orderby'        => 'post_date',
+				'order'          => 'DESC',
+				'status'         => 'publish',
+				'meta_query'     => [
+					[
+						'key'     => 'elb_subscriptions',
+						'value'   => ':"' . $list->ID . '"',
+						'compare' => 'LIKE'
+					]
+				]
+			] );
+		}
+	} catch (Exception $exception) {
+		return false;
+	}
+
+	$subscriber_ids = [];
+
+
+	if (isset($subscribers_query) && $subscribers_query->have_posts()) {
+		// avoid the_posts() which resulting peculiar result when wp_reset_postdata()
+		$subscribers = $subscribers_query->posts;
+
+		$subscriber_ids = [];
+		foreach ($subscribers as $subscriber) {
+			$subscriber_ids []= $subscriber->ID;
+		}
+	}
+
+	wp_reset_postdata();
+	return $subscriber_ids;
+
+}
+
+// 6.24
+function elb_get_list_subscriber_count($list_id)
+{
+	return count(elb_get_list_subscribers($list_id));
+}
+
+// 6.25
+function elb_get_csv_export_link($list_id = 0)
+{
+	return esc_url(admin_url() . 'admin-ajax.php?action=elb_download_subscribers_csv&list_id=' . $list_id);
+}
+
+
 	/* !7. CUSTOM POST TYPES */
 // 7.1 - subscribers
 include_once( plugin_dir_path( __FILE__ ) . 'cpt/elb_subscriber.php');
@@ -1617,14 +1774,14 @@ include_once( plugin_dir_path( __FILE__ ) . 'cpt/elb_subscriber.php');
 include_once( plugin_dir_path( __FILE__ ) . 'cpt/elb_list.php');
 
 
-
-
 /* !8. ADMIN PAGES */
 
 // 8.1
 // hint: dashboard admin page
 function elb_dashboard_admin_page()
 {
+	$export_href = elb_get_csv_export_link();
+
 	$output = '
 		<div class="wrap">
 			
@@ -1632,6 +1789,8 @@ function elb_dashboard_admin_page()
 			
 			<p>The ultimate email list building plugin for WordPress. Capture new subscribers. Reward subscribers with a custom download upon opt-in. Build unlimited lists. Import and export subscribers easily with .csv</p>
 		
+			<p><a href="'. $export_href .'"  class="button button-primary">Export All Subscriber Data</a></p>
+
 		</div>
 	';
 
