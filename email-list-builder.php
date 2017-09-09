@@ -53,6 +53,7 @@
 		5.9 - elb_activate_plugin()
 		5.10 - elb_add_reward_link()
 		5.11 - elb_trigger_reward_download()
+		5.12 - elb_update_reward_link_downloads()
 
 	6. HELPERS
 		6.1 - elb_subscriber_has_subscription()
@@ -326,6 +327,13 @@ function elb_download_reward_shortcode( $args, $content = '' )
 	// IF reward was found
 	if( !$reward )
 		$output .= elb_get_message_html( 'This link is invalid.', 'error');
+	//	if there is the reward
+	else {
+		// if download limits aren't exceeded
+		if ($reward['downloads'] >= elb_get_option('elb_download_limit')) {
+			$output .= elb_get_message_html( 'This link has reached it\'s download limit.', 'warning');
+		}
+	}
 
 	return $output;
 }
@@ -795,7 +803,9 @@ function elb_trigger_reward_download()
 
 		$reward = elb_get_reward($uid);
 
-		if ($reward) {
+		if ($reward && $reward['downloads'] < elb_get_option( 'elb_download_limit')) {
+
+			elb_update_reward_links_downloads($uid);
 
 			// get the reward mimetype
 			$mimetype = $reward['file']['mime_type'];
@@ -813,6 +823,40 @@ function elb_trigger_reward_download()
 
 		}
 	}
+}
+
+// 5.12
+// hint: increases reward link download count by one
+function elb_update_reward_link_downloads( $uid )
+{
+	global $wpdb;
+
+	try {
+		$table_name = $wpdb->prefix . 'elb_reward_links';
+
+		$downloads = $wpdb->get_var(
+			$wpdb->prepare("
+				SELECT downloads
+				FROM $table_name
+				WHERE uid = %s
+			", $uid)
+		);
+
+		$downloads += 1;
+
+		$wpdb->query(
+			$wpdb->prepare("
+				UPDATE $table_name
+				SET downloads = $downloads
+				WHERE uid = %s
+			", $uid)
+		);
+
+	} catch (Exception $exception) {
+		return false;
+	}
+	return true;
+
 }
 
 
@@ -1263,7 +1307,7 @@ function elb_get_email_template( $subscriber_id, $email_template_name, $list_id 
 				case 'subscription_confirmed':
 					$download_limit = elb_get_option('elb_download_limit');
 					$download_link = elb_get_reward_link($subscriber_id, $list_id);
-					$reward_text = '<p>Here is your <a href="'. $download_link .'">UNIQUE DOWNLOAD LINK</a> for '. $reward['title'] .'</p>';
+					$reward_text = '<p>Here is your <a href="'. $download_link .'">UNIQUE DOWNLOAD LINK</a> for '. $reward['title'] .'. This link will expire after '. $download_limit .' downloads</p>';
 					break;
 				default:
 					$reward_text = '';
