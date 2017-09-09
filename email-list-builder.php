@@ -17,6 +17,7 @@
 	  1.5 - load external files to public website
 	  1.6 - Advanced Custom Fields Settings
 		1.7 - register custom menus
+		1.8 - load external files in WordPress admin
 		1.9 - register plugin options
 		1.10 - register activate/deactivate/uninstall functions
 		1.11 - register on page load action i.e 'wp'
@@ -137,6 +138,9 @@ if( !defined('ACF_LITE') ) define('ACF_LITE',true); // turn off ACF plugin menu
 
 // 1.7 - register custom menus
 add_action('admin_menu', 'elb_admin_menus');
+
+// 1.8 - load external files in WordPress admin
+add_action('admin_enqueue_scripts', 'elb_admin_scripts');
 
 // 1.9 - register plugin options
 add_action('admin_init', 'elb_register_options');
@@ -483,6 +487,18 @@ function elb_public_scripts()
 	// enqueue
 	wp_enqueue_script('email-list-builder-js-public');
 	wp_enqueue_style('email-list-builder-css-public');
+}
+
+// 4.3
+// hint: loads external files into wordpress ADMIN
+function elb_admin_scripts() {
+
+	// register scripts with WordPress's internal library
+	wp_register_script('email-list-builder-js-admin', plugins_url('/js/admin/email-list-builder.js',__FILE__), ['jquery'],'',true);
+
+	// add to que of scripts that get loaded into every admin page
+	wp_enqueue_script('email-list-builder-js-admin');
+
 }
 
 
