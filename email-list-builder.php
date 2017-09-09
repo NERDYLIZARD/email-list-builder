@@ -19,12 +19,14 @@
 		1.7 - register custom menus
 		1.9 - register plugin options
 		1.10 - register activate/deactivate/uninstall functions
+		1.11 - register on page load action i.e 'wp'
 
 	2. SHORTCODES
 		2.1 - elb_register_shortcodes()
 		2.2 - elb_form_shortcode()
 		2.3 - elb_manage_subscriptions_shortcode()
 		2.4 - elb_confirm_subscription_shortcode()
+		2.5 - elb_download_reward_shortcode()
 
 	3. FILTERS
 		3.1 - elb_subscriber_column_headers()
@@ -49,6 +51,8 @@
 		5.7 - elb_confirm_subscription()
 		5.8 - elb_create_plugin_tables()
 		5.9 - elb_activate_plugin()
+		5.10 - elb_add_reward_link()
+		5.11 - elb_trigger_reward_download()
 
 	6. HELPERS
 		6.1 - elb_subscriber_has_subscription()
@@ -70,6 +74,9 @@
 		6.17 - elb_get_optin_link()
 		6.18 - elb_get_message_html()
 		6.19 - elb_get_list_reward()
+		6.20 - elb_get_reward_link()
+		6.21 - elb_generate_reward_uid()
+		6.22 - elb_get_reward()
 
 	7. CUSTOM POST TYPES
 		7.1 - subscribers
@@ -130,6 +137,10 @@ add_action('admin_init', 'elb_register_options');
 // 1.10 - register activate/deactivate/uninstall functions
 register_activation_hook(__FILE__, 'elb_activate_plugin');
 
+// 1.11 - register on page load action
+// trigger reward downloads
+add_action('wp', 'elb_trigger_reward_download');
+
 
 /* !2. SHORTCODES */
 
@@ -139,7 +150,7 @@ function elb_register_shortcodes()
   add_shortcode('elb_form', 'elb_form_shortcode');
 	add_shortcode('elb_manage_subscriptions', 'elb_manage_subscriptions_shortcode');
 	add_shortcode('elb_confirm_subscription', 'elb_confirm_subscription_shortcode');
-
+	add_shortcode('elb_download_reward','elb_download_reward_shortcode');
 }
 
 // 2.2 - return html subscription form
@@ -300,6 +311,24 @@ function elb_confirm_subscription_shortcode( $args, $content = '' )
 
 }
 
+// 2.5
+// [elb_download_reward]
+// hint: returns a message if the download link has expired or is invalid
+function elb_download_reward_shortcode( $args, $content = '' )
+{
+	$output = '';
+
+	$uid = (isset($_GET['reward'])) ? (string)$_GET['reward'] : 0;
+
+	// get reward form link uid
+	$reward = elb_get_reward( $uid );
+
+	// IF reward was found
+	if( !$reward )
+		$output .= elb_get_message_html( 'This link is invalid.', 'error');
+
+	return $output;
+}
 
 
 /* !3. FILTERS */
@@ -382,7 +411,7 @@ function elb_list_column_data($columns, $post_id)
   switch ($columns) {
 	  case 'reward':
 		  $reward = elb_get_list_reward( $post_id );
-		  if ( !empty($reward) )
+		  if ( $reward )
 			  $output .= '<a href="' . $reward['file']['url'] . '" download="' . $reward['title'] . '">' . $reward['title'] . '</a>';
 		  break;
 
@@ -705,7 +734,7 @@ function elb_create_plugin_tables()
 		// return true
 		$return_value = true;
 
-	} catch( Exception $e ) {
+	} catch( Exception $exception ) {
 
 		// php error
 
@@ -721,6 +750,69 @@ function elb_activate_plugin()
 {
 	// setup DB table
 	elb_create_plugin_tables();
+}
+
+// 5.10
+// hint: adds new reward links to the database
+function elb_add_reward_link( $uid, $subscriber_id, $list_id, $attachment_id )
+{
+	global $wpdb;
+
+	try {
+
+		$table_name = $wpdb->prefix . 'elb_reward_links';
+
+		$wpdb->insert(
+			$table_name,
+			[
+				'uid'           => $uid,
+				'subscriber_id' => $subscriber_id,
+				'list_id'       => $list_id,
+				'attachment_id' => $attachment_id
+			],
+			// type
+			[ '%s', '%d', '%d', '%d' ]
+		);
+
+		return true;
+
+	} catch (Exception $exception) {
+		return false;
+	}
+
+}
+
+
+// 5.11
+// hint: triggers a download of the reward file
+function elb_trigger_reward_download()
+{
+	global $post;
+
+	if ($post->ID == elb_get_option('elb_reward_page_id') && isset($_GET['reward'])) {
+
+		$uid = (string)$_GET['reward'];
+
+		$reward = elb_get_reward($uid);
+
+		if ($reward) {
+
+			// get the reward mimetype
+			$mimetype = $reward['file']['mime_type'];
+			// extract the filetype from the mimetype
+			$mimetype_array = explode('/', $mimetype);
+			$filetype = $mimetype_array[1];
+
+			// setup file headers
+			header("Content-type: ".$mimetype,true,200);
+			header("Content-Disposition: attachment; filename=".$reward['title'] .'.'. $filetype);
+			header("Pragma: no-cache");
+			header("Expires: 0");
+			readfile($reward['file']['url']);
+			exit();
+
+		}
+	}
 }
 
 
@@ -1159,6 +1251,26 @@ function elb_get_email_template( $subscriber_id, $email_template_name, $list_id 
 		// get unique opt-in link
 		$optin_link = elb_get_optin_link( $subscriber_data['email'], $list_id );
 
+		// reward
+		$reward = elb_get_list_reward($list_id);
+
+		// assign reward text if there is reward
+		if ($reward) {
+			switch ($email_template_name) {
+				case 'new_subscription':
+					$reward_text = '<p>After confirming your subscription, we will send you a link for a FREE DOWNLOAD of '. $reward['title'] .'</p>';
+					break;
+				case 'subscription_confirmed':
+					$download_limit = elb_get_option('elb_download_limit');
+					$download_link = elb_get_reward_link($subscriber_id, $list_id);
+					$reward_text = '<p>Here is your <a href="'. $download_link .'">UNIQUE DOWNLOAD LINK</a> for '. $reward['title'] .'</p>';
+					break;
+				default:
+					$reward_text = '';
+					break;
+			}
+		}
+
 		// template: new_subscription
 		$email_templates['new_subscription'] = [
 			'subject' => 'Thank you for subscribing to '. $list->post_title .'! Please confirm your subscription.',
@@ -1166,7 +1278,7 @@ function elb_get_email_template( $subscriber_id, $email_template_name, $list_id 
 					'. $default_email_header .'
 					<p>Thank you for subscribing to '. $list->post_title .'!</p>
 					<p>Please <a href="'. $optin_link .'">click here to confirm your subscription.</a></p>
-					'. $default_email_footer . $unsubscribe_text,
+					'. $reward_text . $default_email_footer . $unsubscribe_text,
 		];
 
 		// template: subscription_confirmed
@@ -1175,7 +1287,7 @@ function elb_get_email_template( $subscriber_id, $email_template_name, $list_id 
 			'body' => '
 					'. $default_email_header .'
 					<p>Thank you for confirming your subscription. You are now subscribed to '. $list->post_title .'!</p>
-					'. $default_email_footer . $unsubscribe_text,
+					'. $reward_text . $default_email_footer . $unsubscribe_text,
 		];
 
 	endif;
@@ -1363,10 +1475,97 @@ function elb_get_list_reward( $list_id ) {
 
 }
 
+// 6.20
+// hint: returns a unique link for downloading a reward file
+function elb_get_reward_link( $subscriber_id, $list_id )
+{
+	$link_href = '';
 
+	try {
 
+		$page = get_post(elb_get_option('elb_reward_page_id'));
+		$permalink = get_permalink($page);
 
-/* !7. CUSTOM POST TYPES */
+		$uid = elb_generate_reward_uid($subscriber_id, $list_id);
+
+		$reward = elb_get_list_reward( $list_id );
+
+		if ($uid && $reward) {
+			$link_added = elb_add_reward_link($uid, $subscriber_id, $list_id, $reward['file']['id']);
+
+			if ($link_added) {
+				$startquery = elb_get_querystring_start($permalink);
+				$link_href = $permalink . $startquery .'reward='. urlencode($uid);
+			}
+		}
+
+	} catch (Exception $exception) {}
+
+	return esc_url($link_href);
+}
+
+// 6.21
+// hint: generates a unique
+function elb_generate_reward_uid( $subscriber_id, $list_id )
+{
+	$uid = '';
+
+	$subscriber = get_post($subscriber_id);
+	$list = get_post($list_id);
+
+	if( elb_validate_subscriber( $subscriber ) && elb_validate_list( $list ) ) {
+		$reward = elb_get_list_reward($list_id);
+		if ($reward) {
+			$uid = uniqid('elb', true);
+		}
+	}
+
+	return $uid;
+}
+
+// 6.22
+// hint: returns false if list has no reward or returns the object containing file and title if it does
+// get reward of list + download times
+function elb_get_reward( $uid )
+{
+	$reward_data = false;
+
+	global $wpdb;
+
+	try {
+
+		$table_name = $wpdb->prefix . "elb_reward_links";
+
+		// get list id
+		$list_id = $wpdb->get_var(
+			$wpdb->prepare("
+				SELECT list_id 
+				FROM $table_name 
+				WHERE uid = %s
+			", $uid)
+		);
+
+		// get number of download times
+		$downloads = $wpdb->get_var(
+			$wpdb->prepare("
+				SELECT downloads 
+				FROM $table_name 
+				WHERE uid = %s
+			", $uid)
+		);
+
+		$reward = elb_get_list_reward($list_id);
+
+		if ($reward) {
+			$reward_data = $reward;
+			$reward_data['downloads'] = $downloads;
+		}
+	} catch (Exception $exception) {}
+
+	return $reward_data;
+}
+
+	/* !7. CUSTOM POST TYPES */
 // 7.1 - subscribers
 include_once( plugin_dir_path( __FILE__ ) . 'cpt/elb_subscriber.php');
 
