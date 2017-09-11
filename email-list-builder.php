@@ -498,7 +498,6 @@ function elb_admin_scripts() {
 
 	// add to que of scripts that get loaded into every admin page
 	wp_enqueue_script('email-list-builder-js-admin');
-
 }
 
 
@@ -1725,7 +1724,7 @@ function elb_get_list_subscribers( $list_id = 0 )
 				'post_type'      => 'elb_subscriber',
 				'published'      => true,
 				// get all
-				'posts_per_page' => - 1,
+				'posts_per_page' => -1,
 				'orderby'        => 'post_date',
 				'order'          => 'DESC',
 			] );
@@ -1758,7 +1757,6 @@ function elb_get_list_subscribers( $list_id = 0 )
 		// avoid the_posts() which resulting peculiar result when wp_reset_postdata()
 		$subscribers = $subscribers_query->posts;
 
-		$subscriber_ids = [];
 		foreach ($subscribers as $subscriber) {
 			$subscriber_ids []= $subscriber->ID;
 		}
@@ -1818,18 +1816,101 @@ function elb_dashboard_admin_page()
 // hint: import subscribers admin page
 function elb_import_admin_page()
 {
-	$output = '
-		<div class="wrap">
+	// enque special scripts required for our file import field
+	wp_enqueue_media();
+
+	echo('
+	
+	<div class="wrap" id="import_subscribers">
 			
 			<h2>Import Subscribers</h2>
+						
+			<form id="import_form_1">
 			
-			<p>Page description...</p>
-		
-		</div>
-	';
+				<table class="form-table">
+				
+					<tbody>
+				
+						<tr>
+							<th scope="row"><label for="elb_import_file">Import CSV</label></th>
+							<td>
+								
+								<div class="wp-uploader">
+								    <input type="text" name="elb_import_file_url" class="file-url regular-text" accept="csv">
+								    <input type="hidden" name="elb_import_file_id" class="file-id" value="0" />
+								    <input type="button" name="upload-btn" class="upload-btn button-secondary" value="Upload">
+								</div>
+								
+								
+								<p class="description" id="elb_import_file-description">This is the page where Snappy List Builder will send subscribers to manage their subscriptions. <br />
+									IMPORTANT: In order to work, the page you select must contain the shortcode: <strong>[elb_manage_subscriptions]</strong>.</p>
+							</td>
+						</tr>
+						
+					</tbody>
+					
+				</table>
+				
+			</form>
+			
+			<form id="import_form_2">
+				
+				<table class="form-table">
+				
+					<tbody class="elb-dynamic-content">
+						
+					</tbody>
+					
+					<tbody class="form-table show-only-on-valid" style="display: none">
+						
+						<tr>
+							<th scope="row"><label>Import To List</label></th>
+							<td>
+								<select name="elb_import_list_id">');
 
-	echo $output;
 
+	// get all our email lists
+	$lists = get_posts(
+		array(
+			'post_type'			  =>'elb_list',
+			'status'			    =>'publish',
+			'posts_per_page'  => -1,
+			'orderby'         => 'post_title',
+			'order'           => 'ASC',
+		)
+	);
+
+	// loop over each email list
+	foreach( $lists as &$list ):
+
+		// create the select option for that list
+		$option = '
+												<option value="'. $list->ID .'">
+													'. $list->post_title .'
+												</option>';
+
+		// echo the new option
+		echo $option;
+
+
+	endforeach;
+
+	echo('</select>
+								<p class="description"></p>
+							</td>
+						</tr>
+						
+					</tbody>
+					
+				</table>
+				
+				<p class="submit show-only-on-valid" style="display:none"><input type="submit" name="submit" id="submit" class="button button-primary" value="Import"></p>
+				
+			</form>
+			
+	</div>
+	
+	');
 }
 
 // 8.3
