@@ -57,6 +57,7 @@
 		5.12 - elb_update_reward_link_downloads()
 		5.13 - elb_download_subscribers_csv()
 		5.14 - elb_parse_import_csv()
+		5.15 - elb_import_subscribers()
 
 	6. HELPERS
 		6.1 - elb_subscriber_has_subscription()
@@ -128,6 +129,7 @@ add_action('wp_ajax_nopriv_elb_unsubscribe', 'elb_unsubscribe'); // regular webs
 add_action('wp_ajax_elb_unsubscribe', 'elb_unsubscribe'); // admin user
 add_action('wp_ajax_elb_download_subscribers_csv', 'elb_download_subscribers_csv'); // admin users
 add_action('wp_ajax_elb_parse_import_csv', 'elb_parse_import_csv'); // admin users
+add_action('wp_ajax_elb_import_subscribers', 'elb_import_subscribers'); // admin users
 
 
 // 1.5 - load external files to public website
@@ -1007,6 +1009,104 @@ function elb_parse_import_csv()
 	return elb_return_json($result);
 
 }
+
+// 5.15
+// hint: imports new subscribers from our import admin page
+// this function is a form handler and expect subscriber data in the $_POST scope
+function elb_import_subscribers() {
+
+	// setup our return array
+	$result = [
+		'status'  => 0,
+		'message' => 'Could not import subscribers. ',
+		'error'   => '',
+		'errors'  => [],
+	];
+
+	try {
+
+		// get the assignment values
+		$fname_column = (isset($_POST['elb_fname_column'])) ? (int)$_POST['elb_fname_column'] : 0;
+		$lname_column = (isset($_POST['elb_lname_column'])) ? (int)$_POST['elb_lname_column'] : 0;
+		$email_column = (isset($_POST['elb_email_column'])) ? (int)$_POST['elb_email_column'] : 0;
+
+		// get the list id to import to
+		$list_id = (isset($_POST['elb_import_list_id'])) ? (int)$_POST['elb_import_list_id'] : 0;
+
+		// get the selected subscriber rows to import
+		$selected_rows = (isset($_POST['elb_import_rows'])) ? (array)$_POST['elb_import_rows'] : [];
+
+
+		// setup a variable for counting the subscribers we add
+		$added_subscribers = 0;
+
+		// loop over selected rows and get the data
+		foreach( $selected_rows as $row_id ):
+
+			// build our subscriber data
+			$subscriber_data = [
+				'fname' => (string)$_POST['s_'. $row_id .'_'. $fname_column],
+				'lname' => (string)$_POST['s_'. $row_id .'_'. $lname_column],
+				'email' => (string)$_POST['s_'. $row_id .'_'. $email_column],
+			];
+
+			// IF the subscriber email is invalid
+			if( !is_email($subscriber_data['email']) ):
+
+				// don't attempt to add the subscriber if the email is not valid
+				$result['errors'][] = 'Invalid email detected: '. $subscriber_data['email'] .'. This subscriber was not added';
+
+			else:
+
+				// IF the subscriber email is valid...
+				// add subscriber to the database
+				$subscriber_id = elb_save_subscriber( $subscriber_data );
+
+				// IF subscriber was created or updated successfully
+				if( $subscriber_id ):
+
+					// add subscription for this subscriber without opt-in
+					$subscription_added = elb_add_subscription( $subscriber_id, $list_id );
+
+					// updated our added count
+					$added_subscribers++;
+
+				endif;
+
+			endif;
+
+		endforeach;
+
+		// IF no subscribers were actually added...
+		if( !$added_subscribers ):
+
+			// return error message
+			$result['error'] = 'No subscribers were imported. ';
+
+		else:
+
+			// IF subscribers were added...
+			// return success!
+			$result = [
+				'status'  => 1,
+				'message' => $added_subscribers .' Subscribers imported successfully. ',
+				'error'   => '',
+				'errors'  => [],
+			];
+
+		endif;
+
+	} catch( Exception $e ) {
+
+		// php errpr
+
+	}
+
+	// return result as json
+	elb_return_json( $result );
+
+}
+
 
 
 /* !6. HELPERS */
@@ -1938,9 +2038,8 @@ function elb_import_admin_page()
 								    <input type="button" name="upload-btn" class="upload-btn button-secondary" value="Upload">
 								</div>
 								
-								
-								<p class="description" id="elb_import_file-description">This is the page where Snappy List Builder will send subscribers to manage their subscriptions. <br />
-									IMPORTANT: In order to work, the page you select must contain the shortcode: <strong>[elb_manage_subscriptions]</strong>.</p>
+								<p class="description" id="slb_import_file-description">Expects a CSV file containing "First Name", "Last Name" and "Email Address".</p>
+																
 							</td>
 						</tr>
 						
@@ -1950,7 +2049,7 @@ function elb_import_admin_page()
 				
 			</form>
 			
-			<form id="import_form_2">
+			<form id="import_form_2" action="' . admin_url() . 'admin-ajax.php?action=elb_import_subscribers">
 				
 				<table class="form-table">
 				
