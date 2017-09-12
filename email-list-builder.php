@@ -56,6 +56,7 @@
 		5.11 - elb_trigger_reward_download()
 		5.12 - elb_update_reward_link_downloads()
 		5.13 - elb_download_subscribers_csv()
+		5.14 - elb_parse_import_csv()
 
 	6. HELPERS
 		6.1 - elb_subscriber_has_subscription()
@@ -83,6 +84,7 @@
 		6.23 - elb_get_list_subscribers()
 		6.24 - elb_get_list_subscriber_count()
 		6.25 - elb_get_csv_export_link()
+		6.26 - elb_csv_to_array()
 
 	7. CUSTOM POST TYPES
 		7.1 - subscribers
@@ -125,6 +127,7 @@ add_action('wp_ajax_elb_save_subscription', 'elb_save_subscription'); // admin u
 add_action('wp_ajax_nopriv_elb_unsubscribe', 'elb_unsubscribe'); // regular website visitor
 add_action('wp_ajax_elb_unsubscribe', 'elb_unsubscribe'); // admin user
 add_action('wp_ajax_elb_download_subscribers_csv', 'elb_download_subscribers_csv'); // admin users
+add_action('wp_ajax_elb_parse_import_csv', 'elb_parse_import_csv'); // admin users
 
 
 // 1.5 - load external files to public website
@@ -959,6 +962,52 @@ function elb_download_subscribers_csv()
 
 }
 
+// 5.14
+// hint: this function retrieves a csv file from the server and parses the data into a php array
+// it then returns that array in a json formatted object
+// this function is a ajax post form handler
+// expects: $_POST['elb_import_file_id']
+function elb_parse_import_csv()
+{
+	$result = [
+		'status'  => 0,
+		'message' => 'Could not parse import CSV. ',
+		'error'   => '',
+		'data'    => []
+	];
+
+	try {
+		// get file id from ajax post
+		$attachment_id = (isset($_POST['elb_import_file_id'])) ? $_POST['elb_import_file_id'] : 0;
+
+		// get filename
+		$filename = get_attached_file($attachment_id);
+
+		if ($filename) {
+			// parse csv file into php array
+			$csv_data = elb_csv_to_array($filename, ',');
+
+			// IF we were able to parse the file and there's data in it
+			if ($csv_data && count($csv_data)) {
+				$result = [
+					'status'  => 1,
+					'message' => 'CSV Import data parsed successfully. ',
+					'error'   => '',
+					'data'    => $csv_data
+				];
+			}
+		} else {
+			$result['error'] = 'The import file does not exist. ';
+		}
+
+	} catch (Exception $exception) {
+		$result['error'] = 'Unexpected Error occurred. ';
+	}
+
+	return elb_return_json($result);
+
+}
+
 
 /* !6. HELPERS */
 
@@ -1779,6 +1828,54 @@ function elb_get_csv_export_link($list_id = 0)
 	return esc_url(admin_url() . 'admin-ajax.php?action=elb_download_subscribers_csv&list_id=' . $list_id);
 }
 
+// 6.26
+// hint: this function reads a csv file and converts the contents into a php array
+function elb_csv_to_array($filename = '', $delimiter = ',')
+{
+
+	// this is an important setting!
+	ini_set('auto_detect_line_endings', true);
+
+	// IF the file doesn't exist or the file is not readable return false
+	if(!file_exists($filename) || !is_readable($filename))
+		return FALSE;
+
+	// setup our return data
+	$return_data = [];
+
+	// IF we can open and read the file
+	if (($handle = fopen($filename, 'r')) !== FALSE) {
+
+		$row = 0;
+
+		$headers = [];
+		// while data exists loop over data
+		while (($data = fgetcsv($handle, 1000, $delimiter)) !== FALSE) {
+			// count the number of items in this data
+			$num = count($data);
+			// increment our row variable
+			$row++;
+			// loop over all items and append them to our row data
+			for ($c=0; $c < $num; $c++) {
+				// if this is the first row set it up as our header
+				if( $row == 1):
+					$headers []= $data[$c];
+				else:
+					// all rows greater than 1
+					// add row data item
+					$return_data[$row-2][$headers[$c]] = $data[$c];
+				endif;
+			}
+		}
+
+		// close our file
+		fclose($handle);
+	}
+
+	// return the new data as a php array
+	return $return_data;
+}
+
 
 	/* !7. CUSTOM POST TYPES */
 // 7.1 - subscribers
@@ -2014,6 +2111,7 @@ function elb_register_options()
 
 
 /* !10. MISCELLANEOUS */
+
 
 
 
