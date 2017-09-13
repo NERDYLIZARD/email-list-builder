@@ -58,6 +58,7 @@
 		5.13 - elb_download_subscribers_csv()
 		5.14 - elb_parse_import_csv()
 		5.15 - elb_import_subscribers()
+		5.16 - elb_check_wp_version()
 
 	6. HELPERS
 		6.1 - elb_subscriber_has_subscription()
@@ -86,6 +87,7 @@
 		6.24 - elb_get_list_subscriber_count()
 		6.25 - elb_get_csv_export_link()
 		6.26 - elb_csv_to_array()
+		6.27 - elb_get_admin_notice()
 
 	7. CUSTOM POST TYPES
 		7.1 - subscribers
@@ -152,6 +154,7 @@ add_action('admin_init', 'elb_register_options');
 
 // 1.10 - register activate/deactivate/uninstall functions
 register_activation_hook(__FILE__, 'elb_activate_plugin');
+add_action( 'admin_notices', 'elb_check_wp_version' );
 
 // 1.11 - register on page load action
 // trigger reward downloads
@@ -1107,6 +1110,31 @@ function elb_import_subscribers() {
 
 }
 
+// 5.16
+// hint: checks the current version of wordpress and displays a message in the plugin page if the version is untested
+function elb_check_wp_version()
+{
+	global $pagenow;
+
+	if ($pagenow == 'plugins.php' && is_plugin_active('email-list-builder/email-list-builder.php')) {
+		// get current version
+		$wp_version = get_bloginfo('version');
+		// tested versions
+		$tested_version = [
+			'4.8.1',
+			'4.8.2'
+		];
+
+		if (!in_array($wp_version, $tested_version)) {
+			// get notice
+			$notice = elb_get_admin_notice('Email List Builder has not been tested in your version of WordPress. It still may work though...','error');
+
+			echo $notice;
+		}
+
+	}
+
+}
 
 
 /* !6. HELPERS */
@@ -1976,6 +2004,16 @@ function elb_csv_to_array($filename = '', $delimiter = ',')
 	return $return_data;
 }
 
+// 6.27
+// hint: returns html formatted for WP admin notices
+function elb_get_admin_notice( $message = '', $class = '' )
+{
+	return '
+		<div class="'. $class .'">
+		    <p>'. $message .'</p>
+		</div>';
+}
+
 
 	/* !7. CUSTOM POST TYPES */
 // 7.1 - subscribers
@@ -2038,7 +2076,7 @@ function elb_import_admin_page()
 								    <input type="button" name="upload-btn" class="upload-btn button-secondary" value="Upload">
 								</div>
 								
-								<p class="description" id="slb_import_file-description">Expects a CSV file containing "First Name", "Last Name" and "Email Address".</p>
+								<p class="description" id="elb_import_file-description">Expects a CSV file containing "First Name", "Last Name" and "Email Address".</p>
 																
 							</td>
 						</tr>
