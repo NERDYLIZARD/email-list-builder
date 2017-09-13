@@ -193,7 +193,10 @@ function elb_form_shortcode($args, $content = '')
 			<form id="elb_register_form" name="elb_form" class="elb-form" method="post"
 			  action="' . admin_url() . 'admin-ajax.php?action=elb_save_subscription">
 			  
-			  <input type="hidden" name="elb_list" value="' . $list_id . '">';
+			  <input type="hidden" name="elb_list" value="' . $list_id . '">
+			  
+        '. wp_nonce_field( 'elb-register-subscription_'.$list_id, '_wpnonce', true, false );
+
 
 	if( strlen($title) )
 		$output .= '<h3 class="elb-title">'. $title .'</h3>';
@@ -550,6 +553,13 @@ function elb_save_subscription()
 
 	  $list_id = (int) $_POST['elb_list'];
 
+	  // check the nonce
+	  if( !check_ajax_referer( 'elb-register-subscription_'.$list_id ) ) {
+			$result['error'] = 'The submitted form was not fetch from our server';
+			elb_return_json($result);
+	  }
+
+
 	  $subscriber_data = [
 		  'fname' => sanitize_text_field( $fname ),
 		  'lname' => sanitize_text_field( $lname ),
@@ -669,6 +679,12 @@ function elb_unsubscribe()
 	}
 
 	try {
+
+		// check the nonce
+		if( check_ajax_referer( 'elb-update-subscriptions_'. $subscriber_id ) ){
+			$result['error'] = 'The submitted form was not fetch from our server';
+			elb_return_json($result);
+		}
 
 		elb_remove_subscriptions( $subscriber_id, $list_ids );
 
@@ -1560,10 +1576,14 @@ function elb_get_manage_subscriptions_html( $subscriber_id )
 		// set the title
 		$title = $subscriber_data['fname'] .'\'s Subscriptions';
 
+		$nonce = wp_nonce_field( 'elb-update-subscriptions_'. $subscriber_id, '_wpnonce', true, false );
+
 		// build out output html
 		$output = '
 			<form id="elb_manage_subscriptions_form" class="elb-form" method="post"
 	      action="' . admin_url() . 'admin-ajax.php?action=elb_unsubscribe">
+	      
+        '. $nonce .'
 				
 				<input type="hidden" name="subscriber_id" value="'. $subscriber_id .'">
 				
@@ -2270,7 +2290,7 @@ function elb_options_admin_page()
 		
 		<form action="options.php" method="post">');
 
-			// outputs a unique nounce for our plugin options
+			// outputs a unique nonce for our plugin options
 			settings_fields('elb_plugin_options');
 			// generates a unique hidden field with our form handling url
 			@do_settings_fields('elb_plugin_options');
