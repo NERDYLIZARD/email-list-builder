@@ -59,6 +59,10 @@
 		5.14 - elb_parse_import_csv()
 		5.15 - elb_import_subscribers()
 		5.16 - elb_check_wp_version()
+		5.17 - elb_uninstall_plugin()
+		5.18 - elb_remove_plugin_tables()
+		5.19 - elb_remove_post_data()
+		5.20 - elb_remove_options()
 
 	6. HELPERS
 		6.1 - elb_subscriber_has_subscription()
@@ -88,6 +92,7 @@
 		6.25 - elb_get_csv_export_link()
 		6.26 - elb_csv_to_array()
 		6.27 - elb_get_admin_notice()
+		6.28 - elb_get_options_settings()
 
 	7. CUSTOM POST TYPES
 		7.1 - subscribers
@@ -155,6 +160,7 @@ add_action('admin_init', 'elb_register_options');
 // 1.10 - register activate/deactivate/uninstall functions
 register_activation_hook(__FILE__, 'elb_activate_plugin');
 add_action( 'admin_notices', 'elb_check_wp_version' );
+register_uninstall_hook(__FILE__, 'elb_uninstall_plugin');
 
 // 1.11 - register on page load action
 // trigger reward downloads
@@ -1131,11 +1137,100 @@ function elb_check_wp_version()
 
 			echo $notice;
 		}
+	}
+}
+
+// 5.17
+// hint: runs functions for plugin deactivation
+function elb_uninstall_plugin()
+{
+	// remove our custom plugin tables
+	elb_remove_plugin_tables();
+	// remove custom post types posts and data
+	elb_remove_post_data();
+	// remove plugin options
+	elb_remove_options();
+}
+
+// 5.18
+//hint: remove plugin custom tables
+function elb_remove_plugin_tables()
+{
+	global $wpdb;
+
+	$tables_removed = false;
+
+	try {
+		$reward_links_table = $wpdb->prefix . 'elb_reward_links';
+
+		$wpdb->query( "DROP IF EXISTS $reward_links_table;" );
+	}
+	catch (Exception $exception) {
 
 	}
+	return $tables_removed;
+}
+
+// 5.19
+// hint: remove plugin related custom post types and data
+function elb_remove_post_data()
+{
+	global $wpdb;
+
+	$data_removed = false;
+
+	$table_prefix = $wpdb->prefix;
+
+	try {
+		$post_table = $table_prefix . 'posts';
+
+		$custom_post_types = [
+			'elb_subscriber',
+			'elb_list',
+		];
+
+		// delete custom post types
+		$data_removed = $wpdb->query(
+			$wpdb->prepare("
+				DELETE FROM $post_table
+				WHERE post_type = %s OR post_type = %s
+			",
+				$custom_post_types[0],
+				$custom_post_types[1]
+			)
+		);
+
+		$post_meta_table = $table_prefix . 'post_meta';
+
+		// delete orphaned custom post types meta
+		$data_removed = $wpdb->query( "
+	     DELETE pm
+	     FROM $post_meta_table pm
+	     LEFT JOIN $post_table wp ON wp.ID = pm.post_id
+	     WHERE wp.ID IS NULL
+     "
+		);
+
+	}
+	catch (Exception $exception) {}
+
+	return $data_removed;
 
 }
 
+//5.20
+// hint: removes any custom options from the database
+function elb_remove_options()
+{
+	try {
+		$options = elb_get_options_settings();
+
+		foreach ($options['settings'] as $setting) {
+			unregister_setting($options['group'], $setting);
+		}
+	}
+	catch (Exception $exception) {}
+}
 
 /* !6. HELPERS */
 
@@ -2014,6 +2109,21 @@ function elb_get_admin_notice( $message = '', $class = '' )
 		</div>';
 }
 
+// 6.28
+// hint: get's an array of plugin option data (group and settings) so as to save it all in one place
+function elb_get_options_settings()
+{
+	return [
+		'group'     =>'elb_plugin_options',
+		'settings'  => [
+			'elb_manage_subscription_page_id',
+			'elb_confirmation_page_id',
+			'elb_reward_page_id',
+			'elb_email_footer',
+			'elb_download_limit',
+		],
+	];
+}
 
 	/* !7. CUSTOM POST TYPES */
 // 7.1 - subscribers
@@ -2238,11 +2348,11 @@ function elb_options_admin_page()
 /* !9. SETTINGS */
 function elb_register_options()
 {
-	register_setting('elb_plugin_options', 'elb_manage_subscription_page_id');
-	register_setting('elb_plugin_options', 'elb_confirmation_page_id');
-	register_setting('elb_plugin_options', 'elb_reward_page_id');
-	register_setting('elb_plugin_options', 'elb_email_footer');
-	register_setting('elb_plugin_options', 'elb_download_limit');
+	$options = elb_get_options_settings();
+
+	foreach ( $options['settings'] as $setting ) {
+		register_setting($options['group'], $setting);
+	}
 }
 
 
